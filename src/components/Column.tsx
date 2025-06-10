@@ -12,6 +12,7 @@ interface ColumnProps {
   onDragStart: (e: React.DragEvent, task: Task) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, status: Task['status']) => void;
+  onSubtasksChange: (taskId: string, subtasks: Task['subtasks']) => void;
   isDragOver: boolean;
 }
 
@@ -23,6 +24,7 @@ export const Column: React.FC<ColumnProps> = ({
   onDragStart,
   onDragOver,
   onDrop,
+  onSubtasksChange,
   isDragOver
 }) => {
   return (
@@ -52,6 +54,7 @@ export const Column: React.FC<ColumnProps> = ({
             onUpdate={onUpdateTask}
             onDelete={onDeleteTask}
             onDragStart={onDragStart}
+            onSubtasksChange={onSubtasksChange}
           />
         ))}
         

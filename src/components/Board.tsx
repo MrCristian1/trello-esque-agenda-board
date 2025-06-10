@@ -5,6 +5,7 @@ import { useTasks } from '../hooks/useTasks';
 import { Column } from './Column';
 import { AddTaskForm } from './AddTaskForm';
 import { SearchFilter } from './SearchFilter';
+import { WeekNavigation } from './WeekNavigation';
 import { useToast } from '@/hooks/use-toast';
 
 const columns: ColumnType[] = [
@@ -14,22 +15,37 @@ const columns: ColumnType[] = [
 ];
 
 export const Board: React.FC = () => {
-  const { tasks, addTask, updateTask, deleteTask, moveTask, getTasksByStatus } = useTasks();
+  const { 
+    tasks, 
+    addTask, 
+    updateTask, 
+    deleteTask, 
+    moveTask, 
+    getTasksForWeek, 
+    getFilteredTasksByStatus,
+    updateSubtasks
+  } = useTasks();
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentWeek, setCurrentWeek] = useState(new Date());
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const filteredTasks = useMemo(() => {
-    if (!searchTerm) return tasks;
-    return tasks.filter(task =>
-      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [tasks, searchTerm]);
+  const weekTasks = useMemo(() => getTasksForWeek(currentWeek), [tasks, currentWeek]);
 
-  const getFilteredTasksByStatus = (status: Task['status']) => {
-    return filteredTasks.filter(task => task.status === status);
+  const filteredTasks = useMemo(() => {
+    if (!searchTerm) return weekTasks;
+    return weekTasks.filter(task =>
+      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.subtasks.some(subtask => 
+        subtask.title.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    );
+  }, [weekTasks, searchTerm]);
+
+  const getFilteredTasksByStatusMemo = (status: Task['status']) => {
+    return getFilteredTasksByStatus(status, currentWeek, searchTerm);
   };
 
   const handleDragStart = (e: React.DragEvent, task: Task) => {
@@ -37,7 +53,6 @@ export const Board: React.FC = () => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/html', '');
     
-    // Add dragging class to the element
     setTimeout(() => {
       (e.target as HTMLElement).classList.add('dragging');
     }, 0);
@@ -55,7 +70,6 @@ export const Board: React.FC = () => {
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    // Only remove drag over if leaving the column completely
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDragOverColumn(null);
     }
@@ -73,7 +87,6 @@ export const Board: React.FC = () => {
       });
     }
 
-    // Remove dragging class from all elements
     document.querySelectorAll('.dragging').forEach(el => {
       el.classList.remove('dragging');
     });
@@ -81,8 +94,8 @@ export const Board: React.FC = () => {
     setDraggedTask(null);
   };
 
-  const handleAddTask = (title: string, description?: string) => {
-    addTask(title, description);
+  const handleAddTask = (title: string, description?: string, category?: Task['category'], dueDate?: Date) => {
+    addTask(title, description, category, dueDate);
     toast({
       title: "Tarea creada",
       description: `La tarea "${title}" se añadió a Pendiente`,
@@ -107,8 +120,12 @@ export const Board: React.FC = () => {
     });
   };
 
-  const totalTasks = tasks.length;
-  const completedTasks = getTasksByStatus('done').length;
+  const handleSubtasksChange = (taskId: string, subtasks: Task['subtasks']) => {
+    updateSubtasks(taskId, subtasks);
+  };
+
+  const totalTasks = weekTasks.length;
+  const completedTasks = weekTasks.filter(task => task.status === 'done').length;
 
   return (
     <div className="p-6 bg-board-bg min-h-screen">
@@ -117,9 +134,15 @@ export const Board: React.FC = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Mi Agenda Personal</h1>
           <p className="text-muted-foreground">
-            {totalTasks} tareas totales • {completedTasks} completadas
+            {totalTasks} tareas esta semana • {completedTasks} completadas
           </p>
         </div>
+
+        {/* Week Navigation */}
+        <WeekNavigation 
+          currentWeek={currentWeek}
+          onWeekChange={setCurrentWeek}
+        />
 
         {/* Add Task Form */}
         <AddTaskForm onAddTask={handleAddTask} />
@@ -131,7 +154,7 @@ export const Board: React.FC = () => {
 
         {/* Search Results Info */}
         {searchTerm && (
-          <div className="mb-4 p-3 bg-primary/10 rounded-lg">
+          <div className="mb-4 p-3 bg-primary/10 rounded-lg animate-fade-in">
             <p className="text-sm">
               Mostrando {filteredTasks.length} de {totalTasks} tareas para "{searchTerm}"
             </p>
@@ -148,12 +171,13 @@ export const Board: React.FC = () => {
             >
               <Column
                 column={column}
-                tasks={getFilteredTasksByStatus(column.status)}
+                tasks={getFilteredTasksByStatusMemo(column.status)}
                 onUpdateTask={handleUpdateTask}
                 onDeleteTask={handleDeleteTask}
                 onDragStart={handleDragStart}
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
+                onSubtasksChange={handleSubtasksChange}
                 isDragOver={dragOverColumn === column.id}
               />
             </div>
@@ -162,8 +186,8 @@ export const Board: React.FC = () => {
 
         {/* Empty State */}
         {totalTasks === 0 && (
-          <div className="text-center py-12">
-            <h3 className="text-xl font-medium mb-2">¡Bienvenido a tu agenda!</h3>
+          <div className="text-center py-12 animate-fade-in">
+            <h3 className="text-xl font-medium mb-2">¡No hay tareas esta semana!</h3>
             <p className="text-muted-foreground mb-4">
               Comienza creando tu primera tarea para organizar tu trabajo.
             </p>
